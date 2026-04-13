@@ -1,0 +1,1517 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>家庭收支簿</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #222222;
+    --border: #2e2e2e;
+    --text: #f0ede8;
+    --text-muted: #888;
+    --text-dim: #555;
+    --accent: #e8c97a;
+    --accent2: #7ac8e8;
+    --accent3: #e87a9a;
+    --green: #7ae8a8;
+    --red: #e87a7a;
+    --cat-daily: #e8c97a;
+    --cat-food: #7ae8a8;
+    --cat-dining: #7ac8e8;
+    --cat-rent: #c87ae8;
+    --cat-util: #e87a9a;
+    --cat-other: #e8a87a;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Noto Sans TC', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Layout ── */
+  .app { display: flex; flex-direction: column; min-height: 100vh; }
+
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+  }
+
+  .logo { font-size: 18px; font-weight: 700; letter-spacing: .02em; }
+  .logo span { color: var(--accent); }
+
+  .sync-badge {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--green);
+    background: rgba(122,232,168,.12);
+    border: 1px solid rgba(122,232,168,.25);
+    padding: 3px 10px;
+    border-radius: 20px;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .sync-dot { width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+  /* ── Month Tabs ── */
+  .month-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 14px 20px 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .month-tabs::-webkit-scrollbar { display: none; }
+
+  .month-tab {
+    flex-shrink: 0;
+    padding: 8px 18px;
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    border-bottom: none;
+    background: transparent;
+    color: var(--text-muted);
+    transition: all .2s;
+  }
+  .month-tab:hover { color: var(--text); }
+  .month-tab.active {
+    background: var(--bg);
+    border-color: var(--border);
+    color: var(--accent);
+  }
+  .month-tab.add-tab {
+    color: var(--accent);
+    font-size: 18px;
+    padding: 4px 14px;
+  }
+
+  /* ── Main ── */
+  main { flex: 1; padding: 20px; max-width: 1200px; margin: 0 auto; width: 100%; }
+
+  /* ── Overview Card ── */
+  .overview-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  @media(max-width:768px) { .overview-grid { grid-template-columns: 1fr 1fr; } }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+  }
+  .stat-label { font-size: 11px; color: var(--text-muted); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
+  .stat-value { font-family: 'DM Mono', monospace; font-size: 22px; font-weight: 500; }
+  .stat-value.budget { color: var(--accent2); }
+  .stat-value.spent { color: var(--text); }
+  .stat-value.diff.ok { color: var(--green); }
+  .stat-value.diff.over { color: var(--red); }
+
+  .budget-input-wrap { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+  .budget-input {
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--border);
+    color: var(--accent2);
+    font-family: 'DM Mono', monospace;
+    font-size: 22px;
+    width: 130px;
+    outline: none;
+  }
+
+  /* ── Chart Card ── */
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 180px;
+  }
+  .chart-card canvas { max-width: 160px; max-height: 160px; }
+  .chart-legend { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; width: 100%; }
+  .legend-row { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .legend-dot { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
+
+  /* ── Section Tabs ── */
+  .section-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 4px;
+    width: fit-content;
+  }
+  .sec-tab {
+    padding: 7px 20px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all .2s;
+    border: none;
+    background: transparent;
+  }
+  .sec-tab.active { background: var(--surface2); color: var(--text); }
+
+  /* ── Table ── */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .table-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    padding: 7px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: all .2s;
+    font-family: 'Noto Sans TC', sans-serif;
+  }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { opacity: .85; }
+  .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border); }
+  .btn-ghost:hover { color: var(--text); border-color: var(--text-muted); }
+  .btn-cam { background: rgba(122,200,232,.15); color: var(--accent2); border: 1px solid rgba(122,200,232,.3); }
+  .btn-cam:hover { background: rgba(122,200,232,.25); }
+
+  .search-input {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 13px;
+    padding: 7px 12px;
+    outline: none;
+    width: 180px;
+    font-family: 'Noto Sans TC', sans-serif;
+  }
+  .search-input::placeholder { color: var(--text-dim); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    background: var(--surface2);
+    padding: 10px 12px;
+    text-align: left;
+    font-size: 11px;
+    letter-spacing: .05em;
+    color: var(--text-muted);
+    font-weight: 500;
+    white-space: nowrap;
+    position: sticky; top: 0;
+  }
+  td {
+    padding: 9px 12px;
+    border-bottom: 1px solid rgba(255,255,255,.04);
+    vertical-align: middle;
+    white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.025); }
+
+  .cat-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 9px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .expiry-warn { color: var(--red); }
+  .expiry-ok { color: var(--green); }
+  .expiry-soon { color: var(--accent); }
+
+  .price-cell { font-family: 'DM Mono', monospace; }
+
+  .action-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: all .2s;
+  }
+  .action-btn:hover { color: var(--text); background: var(--surface2); }
+
+  /* ── Modal ── */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.7);
+    backdrop-filter: blur(4px);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    width: 100%;
+    max-width: 560px;
+    max-height: 90vh;
+    overflow-y: auto;
+    animation: slideUp .25s ease;
+  }
+  @keyframes slideUp { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+
+  .modal-title { font-size: 18px; font-weight: 700; margin-bottom: 22px; }
+
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .form-grid .full { grid-column: 1/-1; }
+
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-label { font-size: 11px; color: var(--text-muted); letter-spacing: .05em; text-transform: uppercase; }
+  .form-input, .form-select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 14px;
+    padding: 9px 12px;
+    outline: none;
+    transition: border .2s;
+    font-family: 'Noto Sans TC', sans-serif;
+    width: 100%;
+  }
+  .form-input:focus, .form-select:focus { border-color: var(--accent); }
+  .form-select option { background: var(--surface2); }
+
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+
+  /* ── OCR Modal ── */
+  .ocr-drop {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .2s;
+    margin-bottom: 16px;
+  }
+  .ocr-drop:hover, .ocr-drop.dragging { border-color: var(--accent2); background: rgba(122,200,232,.06); }
+  .ocr-drop-icon { font-size: 36px; margin-bottom: 10px; }
+  .ocr-drop-text { font-size: 14px; color: var(--text-muted); }
+  .ocr-preview { max-width: 100%; border-radius: var(--radius-sm); margin-bottom: 12px; }
+  .ocr-result {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+    font-size: 13px;
+    line-height: 1.8;
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .ocr-status { font-size: 13px; color: var(--accent2); margin: 8px 0; }
+
+  /* ── Empty state ── */
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--text-muted); }
+  .empty-state-icon { font-size: 40px; margin-bottom: 12px; }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    bottom: 24px; right: 24px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 18px;
+    font-size: 13px;
+    z-index: 999;
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all .3s;
+    max-width: 280px;
+  }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.success { border-color: var(--green); color: var(--green); }
+  .toast.error { border-color: var(--red); color: var(--red); }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  select option { color: #000; }
+
+  /* ── Global Search ── */
+  .global-search-wrap {
+    padding: 10px 20px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+  }
+  .global-search-icon {
+    position: absolute;
+    left: 32px;
+    font-size: 14px;
+    color: var(--text-dim);
+    pointer-events: none;
+  }
+  .global-search {
+    flex: 1;
+    max-width: 420px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-size: 13px;
+    padding: 8px 14px 8px 36px;
+    outline: none;
+    font-family: 'Noto Sans TC', sans-serif;
+    transition: border .2s;
+  }
+  .global-search:focus { border-color: var(--accent); }
+  .global-search::placeholder { color: var(--text-dim); }
+  .search-scope { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+
+  /* ── Expandable grocery list ── */
+  .grocery-list { width: 100%; }
+  .grocery-row { border-bottom: 1px solid rgba(255,255,255,.04); }
+  .grocery-row:last-child { border-bottom: none; }
+
+  .grocery-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .grocery-summary:hover { background: rgba(255,255,255,.03); }
+
+  .grocery-chevron {
+    font-size: 10px;
+    color: var(--text-dim);
+    transition: transform .2s;
+    flex-shrink: 0;
+    margin-left: 4px;
+  }
+  .grocery-row.open .grocery-chevron { transform: rotate(90deg); }
+
+  .grocery-detail {
+    display: none;
+    padding: 4px 16px 14px 48px;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 10px 20px;
+    background: rgba(255,255,255,.015);
+    border-top: 1px solid rgba(255,255,255,.04);
+    animation: fadeIn .15s ease;
+  }
+  .grocery-row.open .grocery-detail { display: grid; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(-4px)} to{opacity:1;transform:translateY(0)} }
+
+  .detail-field { display: flex; flex-direction: column; gap: 3px; }
+  .detail-label { font-size: 10px; color: var(--text-dim); letter-spacing: .05em; text-transform: uppercase; }
+  .detail-value { font-size: 13px; color: var(--text-muted); }
+  .detail-value.mono { font-family: 'DM Mono', monospace; font-size: 12px; }
+
+  .grocery-name { font-size: 14px; font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .grocery-price { font-family: 'DM Mono', monospace; font-size: 13px; color: var(--text-muted); flex-shrink: 0; }
+  .grocery-expiry-badge { font-size: 11px; padding: 2px 7px; border-radius: 10px; flex-shrink: 0; }
+  .expiry-warn-badge { background: rgba(232,122,122,.15); color: var(--red); }
+  .expiry-soon-badge { background: rgba(232,201,122,.15); color: var(--accent); }
+  .hl { background: rgba(232,201,122,.3); border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header>
+    <div class="logo">家庭<span>收支</span>簿</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button onclick="syncNowFromGS()" title="立即同步" style="background:transparent;border:none;cursor:pointer;font-size:16px;color:var(--text-muted);padding:4px" id="syncBtn">⟳</button>
+      <div class="sync-badge" onclick="openGSSettings()" style="cursor:pointer" title="Google Sheet 設定">
+        <div class="sync-dot"></div>
+        <span id="syncStatus">載入中</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Month Tabs -->
+  <div class="month-tabs" id="monthTabs"></div>
+
+  <!-- Global Search -->
+  <div class="global-search-wrap">
+    <span class="global-search-icon">🔍</span>
+    <input class="global-search" id="globalSearch" placeholder="搜尋品名（跨所有月份）…" oninput="renderGrocery()">
+    <span class="search-scope" id="searchScope"></span>
+  </div>
+
+  <!-- Main -->
+  <main>
+
+    <!-- Overview -->
+    <div class="overview-grid" id="overviewGrid">
+      <div class="stat-card">
+        <div class="stat-label">每月預算</div>
+        <div class="budget-input-wrap">
+          <span style="color:var(--text-muted);font-size:13px">NT$</span>
+          <input class="budget-input" id="budgetInput" type="number" placeholder="40000">
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">實際花費</div>
+        <div class="stat-value spent" id="totalSpent">NT$0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">差額</div>
+        <div class="stat-value diff ok" id="diffAmount">NT$0</div>
+      </div>
+      <div class="chart-card">
+        <canvas id="pieChart"></canvas>
+        <div class="chart-legend" id="chartLegend"></div>
+      </div>
+    </div>
+
+    <!-- Section Tabs -->
+    <div class="section-tabs">
+      <button class="sec-tab active" onclick="switchSection('grocery')">🛒 家用</button>
+      <button class="sec-tab" onclick="switchSection('dining')">🍜 外食</button>
+    </div>
+
+    <!-- Grocery List -->
+    <div class="table-wrap" id="grocerySection">
+      <div class="table-toolbar">
+        <button class="btn btn-primary" onclick="openModal('grocery')">＋ 新增品項</button>
+        <button class="btn btn-cam" onclick="openOCR()">📷 拍照辨識</button>
+        <select class="form-select" style="width:auto;padding:7px 10px" id="groceryCatFilter" onchange="renderGrocery()">
+          <option value="">全部類別</option>
+          <option>生鮮-食</option>
+          <option>雜糧-食</option>
+          <option>日用</option>
+          <option>房租</option>
+          <option>水電雜支</option>
+        </select>
+      </div>
+      <div class="grocery-list" id="groceryList"></div>
+    </div>
+
+    <!-- Dining Table -->
+    <div class="table-wrap" id="diningSection" style="display:none">
+      <div class="table-toolbar">
+        <button class="btn btn-primary" onclick="openModal('dining')">＋ 新增外食</button>
+        <button class="btn btn-cam" onclick="openOCR()">📷 拍照辨識</button>
+        <input class="search-input" id="diningSearch" placeholder="搜尋店家…" oninput="renderDining()">
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead>
+            <tr>
+              <th>類別</th><th>日期</th><th>店家名稱</th><th>價格</th><th>備註</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="diningBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── Add/Edit Grocery Modal ── -->
+<div class="modal-overlay" id="groceryModal">
+  <div class="modal">
+    <div class="modal-title" id="groceryModalTitle">🛒 新增家用品項</div>
+    <input type="hidden" id="g_editMonthKey">
+    <input type="hidden" id="g_editIdx" value="-1">
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">類別</label>
+        <select class="form-select" id="g_cat">
+          <option>生鮮-食</option><option>備糧-食</option><option>日用</option><option>水電雜支</option><option>其他</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">品名</label>
+        <input class="form-input" id="g_name" placeholder="例：雞胸肉">
+      </div>
+      <div class="form-group">
+        <label class="form-label">容量</label>
+        <input class="form-input" id="g_vol" type="number" placeholder="300">
+      </div>
+      <div class="form-group">
+        <label class="form-label">單位</label>
+        <select class="form-select" id="g_unit">
+          <option>g</option><option>kg</option><option>ml</option><option>L</option>
+          <option>個</option><option>包</option><option>條</option><option>片</option>
+          <option>罐</option><option>盒</option><option>瓶</option><option>顆</option><option>份</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">效期</label>
+        <input class="form-input" id="g_expiry" type="date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">開封日</label>
+        <input class="form-input" id="g_open" type="date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">用完時間（預估）</label>
+        <input class="form-input" id="g_done" type="date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">購買日</label>
+        <input class="form-input" id="g_buy" type="date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">價格 (NT$)</label>
+        <input class="form-input" id="g_price" type="number" placeholder="150">
+      </div>
+      <div class="form-group">
+        <label class="form-label">購買通路</label>
+        <input class="form-input" id="g_store" list="storeList" placeholder="全聯、Costco…">
+        <datalist id="storeList">
+          <option>全聯</option><option>Costco</option><option>家樂福</option>
+          <option>大潤發</option><option>頂好</option><option>Flavor Field</option>
+          <option>胖鮮富</option><option>馬可家</option>
+        </datalist>
+      </div>
+      <div class="form-group full">
+        <label class="form-label">備註</label>
+        <input class="form-input" id="g_note" placeholder="例：Costco 點數折扣">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('groceryModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveGrocery()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Add Dining Modal ── -->
+<div class="modal-overlay" id="diningModal">
+  <div class="modal">
+    <div class="modal-title">🍜 新增外食記錄</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">類別</label>
+        <select class="form-select" id="d_cat">
+          <option>早餐</option><option>午餐</option><option>晚餐</option><option>下午茶</option><option>其他</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">日期</label>
+        <input class="form-input" id="d_date" type="date">
+      </div>
+      <div class="form-group full">
+        <label class="form-label">店家名稱</label>
+        <input class="form-input" id="d_store" placeholder="例：KURA壽司">
+      </div>
+      <div class="form-group">
+        <label class="form-label">價格 (NT$)</label>
+        <input class="form-input" id="d_price" type="number" placeholder="300">
+      </div>
+      <div class="form-group">
+        <label class="form-label">備註</label>
+        <input class="form-input" id="d_note" placeholder="例：家庭聚餐">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('diningModal')">取消</button>
+      <button class="btn btn-primary" onclick="saveDining()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── OCR Modal ── -->
+<div class="modal-overlay" id="ocrModal">
+  <div class="modal">
+    <div class="modal-title">📷 拍照記帳</div>
+    <div class="ocr-drop" id="ocrDrop" onclick="document.getElementById('ocrFile').click()">
+      <div class="ocr-drop-icon">📸</div>
+      <div class="ocr-drop-text">點擊上傳收據或食品標籤<br><small style="opacity:.6">照片會顯示在旁邊讓你對照填寫</small></div>
+    </div>
+    <input type="file" id="ocrFile" accept="image/*" style="display:none" onchange="handleOCR(this)">
+    <img id="ocrPreview" class="ocr-preview" style="display:none">
+    <div class="ocr-status" id="ocrStatus" style="display:none"></div>
+    <div class="ocr-result" id="ocrResult" style="display:none"></div>
+    <div id="ocrParsed" style="display:none">
+      <div style="font-size:12px;color:var(--text-muted);margin:12px 0 8px">✨ AI 辨識結果—確認後可直接新增</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">品名 / 店家</label>
+          <input class="form-input" id="ocr_name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">價格 (NT$)</label>
+          <input class="form-input" id="ocr_price" type="number">
+        </div>
+        <div class="form-group">
+          <label class="form-label">日期</label>
+          <input class="form-input" id="ocr_date" type="date">
+        </div>
+        <div class="form-group">
+          <label class="form-label">新增至</label>
+          <select class="form-select" id="ocr_type">
+            <option value="grocery">家用</option>
+            <option value="dining">外食</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-actions" style="margin-top:14px">
+        <button class="btn btn-ghost" onclick="closeModal('ocrModal')">取消</button>
+        <button class="btn btn-primary" onclick="saveOCR()">新增記錄</button>
+      </div>
+    </div>
+    <div class="modal-actions" id="ocrActions">
+      <button class="btn btn-ghost" onclick="closeModal('ocrModal')">關閉</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Google Sheet Settings Modal ── -->
+<div class="modal-overlay" id="gsModal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-title">🔗 連結 Google Sheet</div>
+    <div style="font-size:13px;color:var(--text-muted);line-height:1.8;margin-bottom:20px">
+      請先完成 Apps Script 設定後，將部署網址貼在下方。<br>
+      設定步驟說明請見隨附的 <code style="background:var(--surface2);padding:1px 5px;border-radius:4px">apps-script.js</code> 檔案。
+    </div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label class="form-label">Apps Script Web App 網址</label>
+      <input class="form-input" id="gsUrlInput" placeholder="https://script.google.com/macros/s/…/exec">
+    </div>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:20px">
+      ⚡ 儲存後會立即從 Google Sheet 拉取資料（Google Sheet 的資料為主）<br>
+      🔄 之後每 30 秒自動同步一次<br>
+      ✏️ App 內所有新增、編輯、刪除都會即時寫入 Sheet
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('gsModal')">取消</button>
+      <button class="btn btn-ghost" style="color:var(--red);border-color:var(--red)" onclick="document.getElementById('gsUrlInput').value='';saveGSSettings()">取消連結</button>
+      <button class="btn btn-primary" onclick="saveGSSettings()">儲存並同步</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ════════════════════════════════════════
+//  STATE & STORAGE
+// ════════════════════════════════════════
+const STORAGE_KEY = 'family_budget_v2';
+const SHARED = true;
+
+let state = {
+  months: {},
+  currentMonth: null
+};
+
+let pieChart = null;
+
+// ── Google Sheet 設定 ─────────────────────
+let GS_URL = localStorage.getItem('gs_url') || '';  // Apps Script Web App URL
+let gsSyncing = false;
+
+// ── Storage helpers ──────────────────────
+async function saveState() {
+  try {
+    await window.storage.set(STORAGE_KEY, JSON.stringify(state), SHARED);
+    updateSyncStatus('已同步');
+  } catch(e) { updateSyncStatus('同步失敗'); }
+}
+
+async function loadState() {
+  try {
+    const r = await window.storage.get(STORAGE_KEY, SHARED);
+    if (r) state = JSON.parse(r.value);
+  } catch(e) {}
+}
+
+function updateSyncStatus(msg, color) {
+  const el = document.getElementById('syncStatus');
+  el.textContent = msg;
+  if (color) el.style.color = color;
+  if (msg === '已同步') {
+    setTimeout(() => { el.textContent = GS_URL ? 'Google Sheet 連線中' : '即時同步中'; el.style.color = ''; }, 2000);
+  }
+}
+
+// ── Google Sheet API ─────────────────────
+async function gsCall(action, data) {
+  if (!GS_URL) return null;
+  try {
+    let url = GS_URL + '?action=' + action;
+    if (data) url += '&data=' + encodeURIComponent(JSON.stringify(data));
+    const res = await fetch(url);
+    const json = await res.json();
+    if (json.error) console.error('GS error:', json.error);
+    return json;
+  } catch(e) {
+    console.error('GS fetch error', e);
+    return null;
+  }
+}
+
+async function pullFromGS() {
+  if (!GS_URL) return false;
+  updateSyncStatus('從 Google Sheet 同步中…');
+  const r = await gsCall('read');
+  if (!r || !r.ok) { updateSyncStatus('GS 讀取失敗', 'var(--red)'); return false; }
+
+  // GS 為唯一來源，完整取代所有月份資料
+  state.months = {};
+  Object.entries(r.months).forEach(([mk, m]) => {
+    state.months[mk] = {
+      budget: m.budget || 40000,
+      grocery: m.grocery || [],
+      dining:  m.dining  || [],
+    };
+  });
+
+  // 確保 currentMonth 存在
+  const keys = Object.keys(state.months).sort();
+  if (!state.currentMonth || !state.months[state.currentMonth]) {
+    state.currentMonth = keys[keys.length - 1] || getCurrentMonthKey();
+  }
+
+  await saveState();
+  updateSyncStatus('已同步');
+  return true;
+}
+
+async function gsPushItem(type, monthKey, item) {
+  return gsCall('write', { type, monthKey, item });
+}
+
+async function gsUpdateItem(type, rowIdx, item) {
+  return gsCall('update', { type, rowIdx, item });
+}
+
+async function gsDeleteItem(type, rowIdx) {
+  return gsCall('delete', { type, rowIdx });
+}
+
+async function gsPushBudget(monthKey, budget) {
+  return gsCall('budget', { monthKey, budget });
+}
+
+// ── Month helpers ────────────────────────
+function monthKey(y, m) { return `${y}-${String(m).padStart(2,'0')}`; }
+
+function getCurrentMonthKey() {
+  const d = new Date();
+  return monthKey(d.getFullYear(), d.getMonth()+1);
+}
+
+function ensureMonth(key) {
+  if (!state.months[key]) {
+    state.months[key] = { budget: 40000, grocery: [], dining: [] };
+  }
+  return state.months[key];
+}
+
+function monthLabel(key) {
+  const [y,m] = key.split('-');
+  const names = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+  return `${y} ${names[parseInt(m)-1]}`;
+}
+
+// ── Categories ──────────────────────────
+const CAT_COLORS = {
+  '生鮮-食': '#7ae8a8',
+  '備糧-食': '#e8c97a',
+  '日用': '#7ac8e8',
+  '水電雜支': '#e87a9a',
+  '外食': '#c87ae8',
+  '其他': '#e8a87a',
+};
+
+function catColor(cat) {
+  return CAT_COLORS[cat] || '#888';
+}
+
+// ════════════════════════════════════════
+//  RENDER
+// ════════════════════════════════════════
+function renderMonthTabs() {
+  const tabs = document.getElementById('monthTabs');
+  const keys = Object.keys(state.months).sort();
+  tabs.innerHTML = '';
+  keys.forEach(k => {
+    const t = document.createElement('button');
+    t.className = 'month-tab' + (k === state.currentMonth ? ' active' : '');
+    t.textContent = monthLabel(k);
+    t.onclick = () => selectMonth(k);
+    tabs.appendChild(t);
+  });
+  // Add button
+  const add = document.createElement('button');
+  add.className = 'month-tab add-tab';
+  add.textContent = '＋';
+  add.title = '新增月份';
+  add.onclick = addMonth;
+  tabs.appendChild(add);
+}
+
+function renderOverview() {
+  const m = state.months[state.currentMonth];
+  const budgetInput = document.getElementById('budgetInput');
+  budgetInput.value = m.budget;
+
+  const gTotal = m.grocery.reduce((s,i) => s + (+i.price||0), 0);
+  const dTotal = m.dining.reduce((s,i) => s + (+i.price||0), 0);
+  const total = gTotal + dTotal;
+
+  document.getElementById('totalSpent').textContent = `NT$${total.toLocaleString()}`;
+
+  const diff = m.budget - total;
+  const diffEl = document.getElementById('diffAmount');
+  diffEl.textContent = (diff >= 0 ? '+' : '') + `NT$${diff.toLocaleString()}`;
+  diffEl.className = 'stat-value diff ' + (diff >= 0 ? 'ok' : 'over');
+
+  // Pie
+  renderPie(m);
+}
+
+function renderPie(m) {
+  // Aggregate by category
+  const cats = {};
+  m.grocery.forEach(i => {
+    cats[i.cat] = (cats[i.cat]||0) + (+i.price||0);
+  });
+  m.dining.forEach(i => {
+    cats['外食'] = (cats['外食']||0) + (+i.price||0);
+  });
+
+  const labels = Object.keys(cats);
+  const data = labels.map(l => cats[l]);
+  const colors = labels.map(l => catColor(l));
+
+  const ctx = document.getElementById('pieChart').getContext('2d');
+  if (pieChart) pieChart.destroy();
+  pieChart = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels, datasets: [{ data, backgroundColor: colors, borderColor: '#1a1a1a', borderWidth: 2 }] },
+    options: {
+      cutout: '65%',
+      plugins: { legend: { display: false }, tooltip: {
+        callbacks: { label: ctx => ` NT$${ctx.parsed.toLocaleString()}` }
+      }},
+      animation: { duration: 500 }
+    }
+  });
+
+  // Legend
+  const legend = document.getElementById('chartLegend');
+  const total = data.reduce((a,b)=>a+b,0)||1;
+  legend.innerHTML = labels.map((l,i) =>
+    `<div class="legend-row">
+      <div class="legend-dot" style="background:${colors[i]}"></div>
+      <span style="flex:1;color:var(--text-muted)">${l}</span>
+      <span style="font-family:'DM Mono',monospace;font-size:11px">${Math.round(data[i]/total*100)}%</span>
+    </div>`
+  ).join('');
+}
+
+function highlight(text, q) {
+  if (!q || !text) return text || '—';
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return String(text).replace(new RegExp(escaped, 'gi'), m => `<span class="hl">${m}</span>`);
+}
+
+function renderGrocery() {
+  const q = document.getElementById('globalSearch').value.toLowerCase().trim();
+  const cf = document.getElementById('groceryCatFilter').value;
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  // Cross-month search OR current month only
+  let candidates = [];
+  if (q) {
+    // Search all months
+    Object.entries(state.months).forEach(([monthKey, m]) => {
+      m.grocery.forEach((it, idx) => {
+        if (it.name.toLowerCase().includes(q)) {
+          candidates.push({ it, monthKey, idx });
+        }
+      });
+    });
+    const scopeEl = document.getElementById('searchScope');
+    scopeEl.textContent = candidates.length ? `找到 ${candidates.length} 筆（跨所有月份）` : '無符合結果';
+  } else {
+    document.getElementById('searchScope').textContent = '';
+    const m = state.months[state.currentMonth];
+    m.grocery.forEach((it, idx) => {
+      candidates.push({ it, monthKey: state.currentMonth, idx });
+    });
+  }
+
+  // Apply category filter
+  if (cf) candidates = candidates.filter(c => c.it.cat === cf);
+
+  const list = document.getElementById('groceryList');
+  if (!candidates.length) {
+    list.innerHTML = `<div class="empty-state">
+      <div class="empty-state-icon">🛒</div>
+      <div>${q ? '找不到符合的品項' : '尚無記錄，點擊「新增品項」開始記帳'}</div>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = candidates.map(({ it, monthKey, idx }) => {
+    const color = catColor(it.cat);
+
+    // Expiry badge — only show if item is NOT finished (done is empty)
+    let expiryBadge = '';
+    if (it.expiry && !it.done) {
+      const exp = new Date(it.expiry); exp.setHours(0,0,0,0);
+      const diff = Math.round((exp - today) / 86400000);
+      if (diff < 0) {
+        expiryBadge = `<span class="grocery-expiry-badge expiry-warn-badge">⚠️ 已過期</span>`;
+      } else if (diff <= 7) {
+        expiryBadge = `<span class="grocery-expiry-badge expiry-soon-badge">⏰ ${diff}天後到期</span>`;
+      }
+    }
+
+    // Month label for cross-month results
+    const monthTag = q ? `<span style="font-size:11px;color:var(--text-dim);margin-left:4px">${monthLabel(monthKey)}</span>` : '';
+
+    const unitPrice = it.price && it.vol ? `NT$${(it.price / it.vol).toFixed(2)}` : '—';
+
+    const detailFields = [
+      { label: '容量', value: it.vol ? `${it.vol} ${it.unit}` : '—' },
+      { label: '購買日', value: it.buy || '—' },
+      { label: '效期', value: it.expiry || '—' },
+      { label: '開封日', value: it.open || '—' },
+      { label: '用完時間', value: it.done || '—' },
+      { label: '購買通路', value: it.store || '—' },
+      { label: '單價', value: unitPrice, mono: true },
+      { label: '備註', value: it.note || '—' },
+    ].map(f => `<div class="detail-field">
+      <div class="detail-label">${f.label}</div>
+      <div class="detail-value${f.mono ? ' mono' : ''}">${f.value}</div>
+    </div>`).join('');
+
+    return `<div class="grocery-row" id="grow-${monthKey}-${idx}">
+      <div class="grocery-summary" onclick="toggleGroceryRow('${monthKey}',${idx})">
+        <span class="cat-badge" style="background:${color}22;color:${color};flex-shrink:0">${it.cat}</span>
+        <span class="grocery-name">${highlight(it.name, q)}${monthTag}</span>
+        ${expiryBadge}
+        <span class="grocery-price">NT$${(+it.price||0).toLocaleString()}</span>
+        <button class="action-btn" onclick="event.stopPropagation();editGroceryItem('${monthKey}',${idx})" title="編輯" style="margin-left:4px">✎</button>
+        <button class="action-btn" onclick="event.stopPropagation();deleteItemDirect('${monthKey}',${idx})" title="刪除" style="margin-left:2px">✕</button>
+        <span class="grocery-chevron">▶</span>
+      </div>
+      <div class="grocery-detail">${detailFields}</div>
+    </div>`;
+  }).join('');
+}
+
+function toggleGroceryRow(monthKey, idx) {
+  const row = document.getElementById(`grow-${monthKey}-${idx}`);
+  if (row) row.classList.toggle('open');
+}
+
+function deleteItemDirect(monthKey, idx) {
+  if (!confirm('確定刪除？')) return;
+  const item = state.months[monthKey].grocery[idx];
+  if (GS_URL && item._rowIdx) gsDeleteItem('grocery', item._rowIdx);
+  state.months[monthKey].grocery.splice(idx, 1);
+  saveState();
+  renderAll();
+  toast('已刪除', 'success');
+}
+
+function renderDining() {
+  const m = state.months[state.currentMonth];
+  const q = document.getElementById('diningSearch').value.toLowerCase();
+
+  let items = m.dining.filter(i => {
+    if (q && !i.store.toLowerCase().includes(q)) return false;
+    return true;
+  });
+
+  const body = document.getElementById('diningBody');
+  if (!items.length) {
+    body.innerHTML = `<tr><td colspan="6">
+      <div class="empty-state">
+        <div class="empty-state-icon">🍜</div>
+        <div>尚無外食記錄</div>
+      </div></td></tr>`;
+    return;
+  }
+
+  const catColors = { '早餐':'#e8c97a','午餐':'#7ac8e8','晚餐':'#c87ae8','下午茶':'#7ae8a8','其他':'#e8a87a' };
+  body.innerHTML = items.map((it) => {
+    const realIdx = m.dining.indexOf(it);
+    const color = catColors[it.cat]||'#888';
+    return `<tr>
+      <td><span class="cat-badge" style="background:${color}22;color:${color}">${it.cat}</span></td>
+      <td>${it.date||'—'}</td>
+      <td>${it.store||'—'}</td>
+      <td class="price-cell">NT$${(+it.price||0).toLocaleString()}</td>
+      <td style="color:var(--text-muted)">${it.note||'—'}</td>
+      <td>
+        <button class="action-btn" onclick="deleteItem('dining',${realIdx})" title="刪除">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderAll() {
+  renderMonthTabs();
+  renderOverview();
+  renderGrocery();
+  renderDining();
+}
+
+// ════════════════════════════════════════
+//  ACTIONS
+// ════════════════════════════════════════
+function selectMonth(key) {
+  state.currentMonth = key;
+  renderAll();
+}
+
+function addMonth() {
+  const today = new Date();
+  let y = today.getFullYear(), m = today.getMonth()+1;
+  // advance to next unused month
+  const keys = Object.keys(state.months).sort();
+  if (keys.length) {
+    const last = keys[keys.length-1];
+    const [ly,lm] = last.split('-').map(Number);
+    m = lm + 1; y = ly;
+    if (m > 12) { m = 1; y++; }
+  }
+  const key = monthKey(y, m);
+  ensureMonth(key);
+  state.currentMonth = key;
+  saveState();
+  renderAll();
+}
+
+function switchSection(sec) {
+  document.querySelectorAll('.sec-tab').forEach((t,i) => t.classList.toggle('active', (sec==='grocery'&&i===0)||(sec==='dining'&&i===1)));
+  document.getElementById('grocerySection').style.display = sec==='grocery' ? '' : 'none';
+  document.getElementById('diningSection').style.display = sec==='dining' ? '' : 'none';
+}
+
+function deleteItem(type, idx) {
+  if (!confirm('確定刪除？')) return;
+  state.months[state.currentMonth][type].splice(idx, 1);
+  saveState();
+  renderAll();
+  toast('已刪除', 'success');
+}
+
+// Budget
+document.getElementById('budgetInput').addEventListener('change', function() {
+  const budget = +this.value || 0;
+  state.months[state.currentMonth].budget = budget;
+  if (GS_URL) gsPushBudget(state.currentMonth, budget);
+  saveState();
+  renderOverview();
+});
+
+// ── GS Settings ──────────────────────────
+function openGSSettings() {
+  document.getElementById('gsUrlInput').value = GS_URL;
+  document.getElementById('gsModal').classList.add('open');
+}
+
+async function saveGSSettings() {
+  const url = document.getElementById('gsUrlInput').value.trim();
+  GS_URL = url;
+  localStorage.setItem('gs_url', url);
+  closeModal('gsModal');
+  if (url) {
+    toast('正在從 Google Sheet 同步…');
+    const ok = await pullFromGS();
+    if (ok) { renderAll(); toast('Google Sheet 同步完成！', 'success'); }
+    else toast('連線失敗，請確認網址是否正確', 'error');
+  } else {
+    toast('已取消 Google Sheet 連線');
+  }
+}
+
+async function syncNowFromGS() {
+  if (!GS_URL) { toast('尚未設定 Google Sheet 網址', 'error'); return; }
+  toast('同步中…');
+  const ok = await pullFromGS();
+  if (ok) { renderAll(); toast('同步完成！', 'success'); }
+  else toast('同步失敗', 'error');
+}
+
+// ── Periodic sync ─────────────────────────
+setInterval(async () => {
+  if (GS_URL) {
+    await pullFromGS();
+    renderAll();
+  } else {
+    try {
+      const r = await window.storage.get(STORAGE_KEY, SHARED);
+      if (r) { state = JSON.parse(r.value); renderAll(); }
+    } catch(e) {}
+  }
+}, 30000);
+
+// ════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════
+
+// ── Modal ────────────────────────────────
+function openModal(type) {
+  if (type === 'grocery') {
+    // Reset to add mode
+    document.getElementById('groceryModalTitle').textContent = '🛒 新增家用品項';
+    document.getElementById('g_editIdx').value = '-1';
+    document.getElementById('g_editMonthKey').value = '';
+    document.getElementById('g_buy').value = todayStr();
+    ['g_name','g_expiry','g_open','g_done','g_store','g_note'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('g_vol').value = '';
+    document.getElementById('g_price').value = '';
+    document.getElementById('g_cat').value = '生鮮-食';
+    document.getElementById('g_unit').value = 'g';
+    document.getElementById('groceryModal').classList.add('open');
+  } else {
+    document.getElementById('d_date').value = todayStr();
+    document.getElementById('diningModal').classList.add('open');
+  }
+}
+
+function editGroceryItem(monthKey, idx) {
+  const it = state.months[monthKey].grocery[idx];
+  if (!it) return;
+
+  document.getElementById('groceryModalTitle').textContent = '✏️ 編輯品項';
+  document.getElementById('g_editMonthKey').value = monthKey;
+  document.getElementById('g_editIdx').value = idx;
+
+  document.getElementById('g_cat').value = it.cat || '生鮮-食';
+  document.getElementById('g_name').value = it.name || '';
+  document.getElementById('g_vol').value = it.vol || '';
+  document.getElementById('g_unit').value = it.unit || 'g';
+  document.getElementById('g_expiry').value = it.expiry || '';
+  document.getElementById('g_open').value = it.open || '';
+  document.getElementById('g_done').value = it.done || '';
+  document.getElementById('g_buy').value = it.buy || '';
+  document.getElementById('g_price').value = it.price || '';
+  document.getElementById('g_store').value = it.store || '';
+  document.getElementById('g_note').value = it.note || '';
+
+  document.getElementById('groceryModal').classList.add('open');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+function todayStr() {
+  return new Date().toISOString().slice(0,10);
+}
+
+function saveGrocery() {
+  const name = document.getElementById('g_name').value.trim();
+  if (!name) { toast('請輸入品名', 'error'); return; }
+  const item = {
+    cat: document.getElementById('g_cat').value,
+    name,
+    vol: +document.getElementById('g_vol').value || 0,
+    unit: document.getElementById('g_unit').value,
+    expiry: document.getElementById('g_expiry').value,
+    open: document.getElementById('g_open').value,
+    done: document.getElementById('g_done').value,
+    buy: document.getElementById('g_buy').value,
+    price: +document.getElementById('g_price').value || 0,
+    store: document.getElementById('g_store').value,
+    note: document.getElementById('g_note').value,
+  };
+
+  const editIdx = parseInt(document.getElementById('g_editIdx').value);
+  const editMonthKey = document.getElementById('g_editMonthKey').value;
+
+  if (editIdx >= 0 && editMonthKey) {
+    const existing = state.months[editMonthKey].grocery[editIdx];
+    state.months[editMonthKey].grocery[editIdx] = item;
+    if (GS_URL && existing._rowIdx) gsUpdateItem('grocery', existing._rowIdx, { ...item, monthKey: editMonthKey });
+    toast('已更新：' + name, 'success');
+  } else {
+    state.months[state.currentMonth].grocery.push(item);
+    if (GS_URL) gsPushItem('grocery', state.currentMonth, item);
+    toast('已新增：' + name, 'success');
+  }
+
+  saveState();
+  renderAll();
+  closeModal('groceryModal');
+}
+
+function saveDining() {
+  const store = document.getElementById('d_store').value.trim();
+  if (!store) { toast('請輸入店家名稱', 'error'); return; }
+  const item = {
+    cat: document.getElementById('d_cat').value,
+    date: document.getElementById('d_date').value,
+    store,
+    price: +document.getElementById('d_price').value || 0,
+    note: document.getElementById('d_note').value,
+  };
+  state.months[state.currentMonth].dining.push(item);
+  if (GS_URL) gsPushItem('dining', state.currentMonth, item);
+  saveState();
+  renderAll();
+  closeModal('diningModal');
+  toast('已新增：' + store, 'success');
+  ['d_store','d_price','d_note'].forEach(id => document.getElementById(id).value='');
+}
+
+// ── OCR ──────────────────────────────────
+function openOCR() {
+  document.getElementById('ocrPreview').style.display = 'none';
+  document.getElementById('ocrStatus').style.display = 'none';
+  document.getElementById('ocrResult').style.display = 'none';
+  document.getElementById('ocrParsed').style.display = 'none';
+  document.getElementById('ocrActions').style.display = 'flex';
+  document.getElementById('ocrModal').classList.add('open');
+}
+
+async function handleOCR(input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    const preview = document.getElementById('ocrPreview');
+    preview.src = e.target.result;
+    preview.style.display = 'block';
+
+    const status = document.getElementById('ocrStatus');
+    status.style.display = 'block';
+    status.textContent = '📋 請對照圖片填入資料後新增';
+
+    // Pre-fill date with today
+    document.getElementById('ocr_date').value = todayStr();
+
+    document.getElementById('ocrParsed').style.display = 'block';
+    document.getElementById('ocrActions').style.display = 'none';
+  };
+  reader.readAsDataURL(file);
+}
+
+function saveOCR() {
+  const type = document.getElementById('ocr_type').value;
+  const name = document.getElementById('ocr_name').value.trim();
+  const price = +document.getElementById('ocr_price').value || 0;
+  const date = document.getElementById('ocr_date').value;
+
+  if (!name) { toast('請輸入名稱', 'error'); return; }
+
+  if (type === 'grocery') {
+    state.months[state.currentMonth].grocery.push({
+      cat: '備糧-食', name, vol: 0, unit: '個',
+      expiry: '', open: '', done: '', buy: date, price, store: '', note: '📷 拍照辨識'
+    });
+    switchSection('grocery');
+  } else {
+    state.months[state.currentMonth].dining.push({
+      cat: '其他', date, store: name, price, note: '📷 拍照辨識'
+    });
+    switchSection('dining');
+  }
+
+  saveState();
+  renderAll();
+  closeModal('ocrModal');
+  toast('已從照片新增：' + name, 'success');
+}
+
+// Drag-drop OCR
+const drop = document.getElementById('ocrDrop');
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragging'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('dragging'));
+drop.addEventListener('drop', e => {
+  e.preventDefault();
+  drop.classList.remove('dragging');
+  const file = e.dataTransfer.files[0];
+  if (file) {
+    const input = document.getElementById('ocrFile');
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    input.files = dt.files;
+    handleOCR(input);
+  }
+});
+
+// Close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(el => {
+  el.addEventListener('click', e => { if (e.target === el) el.classList.remove('open'); });
+});
+
+// ── Toast ────────────────────────────────
+function toast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => t.className = 'toast', 2800);
+}
+
+// ════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════
+const MARCH_DATA = {
+  budget: 40000,
+  grocery: [
+    {cat:'房租',name:'房租',vol:0,unit:'N/A',expiry:'',open:'',done:'',buy:'',price:25000,store:'',note:''},
+    {cat:'生鮮-食',name:'嫣紅番茄',vol:450,unit:'g',expiry:'2026-03-08',open:'2026-03-02',done:'2026-03-07',buy:'2026-03-01',price:65,store:'全聯',note:''},
+    {cat:'日用',name:'妙潔耐熱袋',vol:70,unit:'個',expiry:'2027-12-31',open:'2026-03-03',done:'',buy:'2026-03-01',price:38,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'茼蒿',vol:250,unit:'g',expiry:'2026-03-08',open:'2026-03-09',done:'2026-03-09',buy:'2026-03-01',price:29,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'有機小松菜',vol:250,unit:'g',expiry:'2026-03-08',open:'2026-03-03',done:'2026-03-15',buy:'2026-03-01',price:28,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'有機鴻禧菇',vol:100,unit:'g',expiry:'2026-03-08',open:'2026-03-03',done:'2026-03-15',buy:'2026-03-01',price:25,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'有機雪白菇',vol:100,unit:'g',expiry:'2026-03-08',open:'2026-03-03',done:'2026-03-15',buy:'2026-03-01',price:25,store:'全聯',note:''},
+    {cat:'雜糧-食',name:'波本女王',vol:454,unit:'g',expiry:'2026-06-12',open:'2026-03-04',done:'2026-03-25',buy:'2026-03-03',price:343,store:'馬克老爹',note:''},
+    {cat:'生鮮-食',name:'石安後壁雞蛋',vol:30,unit:'顆',expiry:'2026-03-31',open:'2026-03-03',done:'2026-03-17',buy:'2026-03-02',price:329,store:'Costco',note:''},
+    {cat:'生鮮-食',name:'科克蘭全脂鮮乳',vol:3780,unit:'ml',expiry:'2026-04-02',open:'2026-03-05',done:'2026-03-19',buy:'2026-03-02',price:245,store:'Costco',note:''},
+    {cat:'生鮮-食',name:'ARLA高達切片乾酪',vol:24,unit:'片',expiry:'2026-06-25',open:'2026-03-09',done:'',buy:'2026-03-02',price:269,store:'Costco',note:''},
+    {cat:'雜糧-食',name:'酸種麵包',vol:1,unit:'kg',expiry:'2026-03-31',open:'2026-03-05',done:'2026-03-24',buy:'2026-03-04',price:400,store:'璞家',note:''},
+    {cat:'雜糧-食',name:'比司吉',vol:2,unit:'個',expiry:'2026-03-31',open:'2026-03-11',done:'2026-03-19',buy:'2026-03-04',price:150,store:'璞家',note:''},
+    {cat:'生鮮-食',name:'母傳鮮乳優格',vol:450,unit:'g',expiry:'2026-03-27',open:'2026-03-11',done:'2026-03-25',buy:'2026-03-09',price:114,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'博客原條狀火腿',vol:270,unit:'g',expiry:'2026-05-14',open:'2026-03-09',done:'',buy:'2026-03-09',price:105,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'豬軟骨',vol:200,unit:'g',expiry:'2026-03-20',open:'2026-03-09',done:'2026-03-09',buy:'2026-03-09',price:85,store:'全聯',note:''},
+    {cat:'日用',name:'妙管家漂白水',vol:2000,unit:'ml',expiry:'2026-10-29',open:'',done:'',buy:'2026-03-09',price:49,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'霧峰香米飯',vol:400,unit:'g',expiry:'2026-04-02',open:'2026-03-09',done:'2026-03-09',buy:'2026-03-09',price:116,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'大漢傳統板豆腐',vol:400,unit:'g',expiry:'2026-04-02',open:'2026-03-09',done:'2026-03-26',buy:'2026-03-09',price:28,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'美國洋蔥',vol:2,unit:'顆',expiry:'2026-04-02',open:'2026-03-09',done:'2026-03-21',buy:'2026-03-09',price:32,store:'全聯',note:''},
+    {cat:'日用',name:'瓦斯補充罐',vol:20,unit:'ml',expiry:'2026-04-02',open:'2026-03-07',done:'',buy:'2026-03-07',price:32,store:'一加一',note:''},
+    {cat:'日用',name:'泡泡噴罐',vol:200,unit:'ml',expiry:'',open:'2026-03-07',done:'',buy:'2026-03-07',price:80,store:'一加一',note:''},
+    {cat:'日用',name:'噴罐',vol:1000,unit:'ml',expiry:'',open:'2026-03-07',done:'',buy:'2026-03-07',price:35,store:'一加一',note:''},
+    {cat:'生鮮-食',name:'蘋果',vol:3,unit:'顆',expiry:'2026-03-18',open:'2026-03-10',done:'2026-03-14',buy:'2026-03-07',price:30,store:'古意人',note:''},
+    {cat:'生鮮-食',name:'香瓜',vol:1,unit:'顆',expiry:'2026-04-17',open:'2026-03-07',done:'2026-03-14',buy:'2026-03-07',price:80,store:'古意人',note:''},
+    {cat:'生鮮-食',name:'蓮霧',vol:4,unit:'顆',expiry:'2026-04-17',open:'2026-03-08',done:'2026-03-15',buy:'2026-03-07',price:52,store:'古意人',note:''},
+    {cat:'生鮮-食',name:'柳丁',vol:5,unit:'顆',expiry:'2026-04-17',open:'2026-03-07',done:'2026-03-14',buy:'2026-03-07',price:52,store:'古意人',note:''},
+    {cat:'日用',name:'日本和匠吸色片/分色紙',vol:200,unit:'張',expiry:'',open:'2026-03-18',done:'',buy:'2026-03-10',price:243,store:'蝦皮',note:''},
+    {cat:'生鮮-食',name:'雞棒腿切塊',vol:300,unit:'g',expiry:'2026-03-22',open:'2026-03-16',done:'',buy:'2026-03-16',price:109,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'豬瘦絞肉',vol:300,unit:'g',expiry:'2026-03-22',open:'2026-03-16',done:'2026-03-16',buy:'2026-03-16',price:105,store:'全聯',note:''},
+    {cat:'雜糧-食',name:'志斌辣豆瓣醬',vol:460,unit:'g',expiry:'',open:'2026-03-16',done:'',buy:'2026-03-16',price:99,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'有機空心菜',vol:500,unit:'g',expiry:'2026-03-22',open:'2026-03-22',done:'2026-03-22',buy:'2026-03-16',price:78,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'青蔥',vol:200,unit:'g',expiry:'2026-03-22',open:'2026-03-16',done:'',buy:'2026-03-16',price:39,store:'全聯',note:''},
+    {cat:'雜糧-食',name:'龍口冬粉',vol:3,unit:'個',expiry:'2026-12-31',open:'2026-03-16',done:'',buy:'2026-03-16',price:23,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'石安後壁雞蛋',vol:30,unit:'顆',expiry:'2026-03-31',open:'2026-03-16',done:'2026-03-29',buy:'2026-03-13',price:329,store:'Costco',note:''},
+    {cat:'生鮮-食',name:'香瓜',vol:1,unit:'顆',expiry:'2026-04-08',open:'2026-03-23',done:'',buy:'2026-03-16',price:80,store:'古意人',note:''},
+    {cat:'生鮮-食',name:'柳丁',vol:5,unit:'顆',expiry:'2026-04-08',open:'2026-03-17',done:'2026-03-23',buy:'2026-03-16',price:24,store:'古意人',note:''},
+    {cat:'生鮮-食',name:'甜桃',vol:5,unit:'顆',expiry:'2026-04-08',open:'2026-03-16',done:'2026-03-28',buy:'2026-03-16',price:50,store:'古意人',note:''},
+    {cat:'生鮮-食',name:'李子',vol:3,unit:'顆',expiry:'2026-04-08',open:'2026-03-19',done:'2026-03-28',buy:'2026-03-16',price:30,store:'古意人',note:''},
+    {cat:'日用',name:'水槽蓋',vol:1,unit:'個',expiry:'',open:'2026-03-16',done:'',buy:'2026-03-16',price:55,store:'一加一',note:''},
+    {cat:'日用',name:'五月花抽取式廚房紙巾',vol:12,unit:'包',expiry:'',open:'',done:'',buy:'2026-03-17',price:335,store:'Costco',note:''},
+    {cat:'雜糧-食',name:'蜂蜜椰香燕麥片',vol:1000,unit:'g',expiry:'',open:'2026-04-01',done:'',buy:'2026-03-17',price:349,store:'Costco',note:''},
+    {cat:'生鮮-食',name:'原味貝果麵包',vol:8,unit:'個',expiry:'2026-04-30',open:'2026-03-20',done:'',buy:'2026-03-17',price:159,store:'Costco',note:''},
+    {cat:'雜糧-食',name:'桂格蛋白可可燕麥',vol:750,unit:'g',expiry:'',open:'2026-04-01',done:'',buy:'2026-03-17',price:299,store:'Costco',note:''},
+    {cat:'雜糧-食',name:'台畜台灣豬肉鬆',vol:1000,unit:'g',expiry:'2026-08-28',open:'2026-03-18',done:'',buy:'2026-03-17',price:369,store:'Costco',note:''},
+    {cat:'生鮮-食',name:'科克蘭全脂鮮乳',vol:3780,unit:'ml',expiry:'2026-04-16',open:'2026-03-19',done:'',buy:'2026-03-17',price:245,store:'Costco',note:''},
+    {cat:'生鮮-食',name:'澳牛嫩腿心炒絲',vol:165,unit:'g',expiry:'2026-03-24',open:'2026-03-22',done:'2026-03-22',buy:'2026-03-21',price:110,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'安博軟質起司醬',vol:200,unit:'g',expiry:'2026-09-01',open:'2026-03-22',done:'',buy:'2026-03-21',price:99,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'綠花椰菜',vol:1,unit:'顆',expiry:'2026-03-31',open:'2026-03-22',done:'',buy:'2026-03-21',price:35,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'櫛瓜',vol:1,unit:'根',expiry:'2026-03-31',open:'',done:'',buy:'2026-03-21',price:33,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'鮭魚日切',vol:250,unit:'g',expiry:'2026-03-27',open:'2026-03-22',done:'2026-03-22',buy:'2026-03-22',price:139,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'澳牛嫩腿心炒絲',vol:150,unit:'g',expiry:'2026-03-24',open:'2026-03-22',done:'2026-03-22',buy:'2026-03-22',price:101,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'有機鴻鴻禧菇',vol:100,unit:'g',expiry:'2026-03-24',open:'2026-03-22',done:'',buy:'2026-03-22',price:28,store:'全聯',note:''},
+    {cat:'雜糧-食',name:'馬力歐綜合豆(淺培)',vol:454,unit:'g',expiry:'2026-06-12',open:'2026-03-26',done:'',buy:'2026-03-23',price:343,store:'馬克老爹',note:''},
+    {cat:'雜糧-食',name:'大倉關山雷公米',vol:1500,unit:'g',expiry:'2026-09-24',open:'2026-03-24',done:'',buy:'2026-03-24',price:159,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'美國洋蔥',vol:1,unit:'顆',expiry:'2026-03-31',open:'2026-03-24',done:'',buy:'2026-03-24',price:19,store:'全聯',note:''},
+    {cat:'生鮮-食',name:'科克蘭全脂鮮乳',vol:3780,unit:'ml',expiry:'2026-04-29',open:'',done:'',buy:'2026-03-28',price:245,store:'Costco',note:''},
+    {cat:'生鮮-食',name:'全佑雞蛋',vol:30,unit:'顆',expiry:'2026-04-29',open:'2026-03-29',done:'',buy:'2026-03-28',price:279,store:'Costco',note:''},
+    {cat:'生鮮-食',name:'熟成14月帕米吉亞諾',vol:200,unit:'g',expiry:'2026-06-30',open:'2026-03-30',done:'',buy:'2026-03-30',price:279,store:'家樂福',note:''},
+    {cat:'生鮮-食',name:'卡夫帕瑪森起司粉',vol:80,unit:'g',expiry:'2026-06-30',open:'2026-03-30',done:'',buy:'2026-03-30',price:99,store:'家樂福',note:''},
+    {cat:'生鮮-食',name:'冷藏豬培根厚切',vol:300,unit:'g',expiry:'2026-04-30',open:'2026-03-30',done:'',buy:'2026-03-30',price:150,store:'家樂福',note:''},
+    {cat:'生鮮-食',name:'日昇甜木瓜',vol:1,unit:'顆',expiry:'2026-04-15',open:'',done:'',buy:'2026-03-30',price:105,store:'古意人',note:''},
+    {cat:'生鮮-食',name:'台灣柳丁',vol:6,unit:'顆',expiry:'2026-04-15',open:'2026-03-31',done:'',buy:'2026-03-30',price:37,store:'古意人',note:''},
+  ],
+  dining: [
+    {cat:'晚餐',date:'2026-03-05',store:'金沐子健康餐盒',price:300,note:''},
+    {cat:'飲料',date:'2026-03-06',store:'Mr. Brown Coffee',price:285,note:''},
+    {cat:'晚餐',date:'2026-03-06',store:'老麵攤',price:260,note:''},
+    {cat:'晚餐',date:'2026-03-12',store:'雞吉君',price:520,note:''},
+    {cat:'晚餐',date:'2026-03-13',store:'吳家牛肉麵',price:360,note:''},
+    {cat:'晚餐',date:'2026-03-24',store:'摩斯漢堡',price:365,note:''},
+    {cat:'午餐',date:'2026-03-29',store:'客美多咖啡',price:853,note:''},
+  ]
+};
+
+async function init() {
+  await loadState();
+
+  if (GS_URL) {
+    // GS 連線模式：完全以 GS 為主，不注入任何內建資料
+    updateSyncStatus('從 Google Sheet 同步中…');
+    renderAll();
+    const ok = await pullFromGS();
+    if (ok) renderAll();
+    else updateSyncStatus('GS 連線失敗', 'var(--red)');
+  } else {
+    // 無 GS：注入三月示範資料（首次使用）
+    const marchKey = '2026-03';
+    if (!state.months[marchKey]) {
+      state.months[marchKey] = MARCH_DATA;
+      await saveState();
+    }
+    if (!state.currentMonth || !state.months[state.currentMonth]) {
+      state.currentMonth = marchKey;
+    }
+    updateSyncStatus('已同步');
+    renderAll();
+  }
+}
+
+init();
+</script>
+</body>
+</html>
