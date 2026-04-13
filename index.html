@@ -833,12 +833,12 @@ async function gsPushItem(type, monthKey, item) {
   return gsCall('write', { type, monthKey, item });
 }
 
-async function gsUpdateItem(type, rowIdx, item) {
-  return gsCall('update', { type, rowIdx, item });
+async function gsUpdateItem(type, rowIdx, sheetKey, item) {
+  return gsCall('update', { type, rowIdx, sheetKey, item });
 }
 
-async function gsDeleteItem(type, rowIdx) {
-  return gsCall('delete', { type, rowIdx });
+async function gsDeleteItem(type, rowIdx, sheetKey) {
+  return gsCall('delete', { type, rowIdx, sheetKey });
 }
 
 async function gsPushBudget(monthKey, budget) {
@@ -885,7 +885,7 @@ function catColor(cat) {
 // ════════════════════════════════════════
 function renderMonthTabs() {
   const tabs = document.getElementById('monthTabs');
-  const keys = Object.keys(state.months).sort();
+  const keys = Object.keys(state.months).sort().reverse();
   tabs.innerHTML = '';
   keys.forEach(k => {
     const t = document.createElement('button');
@@ -1064,7 +1064,7 @@ function toggleGroceryRow(monthKey, idx) {
 function deleteItemDirect(monthKey, idx) {
   if (!confirm('確定刪除？')) return;
   const item = state.months[monthKey].grocery[idx];
-  if (GS_URL && item._rowIdx) gsDeleteItem('grocery', item._rowIdx);
+  if (GS_URL && item._rowIdx) gsDeleteItem('grocery', item._rowIdx, item._sheet || monthKey);
   state.months[monthKey].grocery.splice(idx, 1);
   saveState();
   renderAll();
@@ -1283,7 +1283,7 @@ function saveGrocery() {
   if (editIdx >= 0 && editMonthKey) {
     const existing = state.months[editMonthKey].grocery[editIdx];
     state.months[editMonthKey].grocery[editIdx] = item;
-    if (GS_URL && existing._rowIdx) gsUpdateItem('grocery', existing._rowIdx, { ...item, monthKey: editMonthKey });
+    if (GS_URL && existing._rowIdx) gsUpdateItem('grocery', existing._rowIdx, existing._sheet || editMonthKey, { ...item, monthKey: editMonthKey });
     toast('已更新：' + name, 'success');
   } else {
     state.months[state.currentMonth].grocery.push(item);
