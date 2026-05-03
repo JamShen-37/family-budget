@@ -535,9 +535,11 @@
           <option value="">全部類別</option>
           <option>生鮮-食</option>
           <option>雜糧-食</option>
+          <option>冷凍食品-食</option>
           <option>日用</option>
           <option>房租</option>
           <option>水電雜支</option>
+          <option>其他</option>
         </select>
       </div>
       <div class="grocery-list" id="groceryList"></div>
@@ -575,7 +577,7 @@
       <div class="form-group">
         <label class="form-label">類別</label>
         <select class="form-select" id="g_cat">
-          <option>生鮮-食</option><option>備糧-食</option><option>日用</option><option>水電雜支</option><option>其他</option>
+          <option>生鮮-食</option><option>雜糧-食</option><option>冷凍食品-食</option><option>日用</option><option>房租</option><option>水電雜支</option><option>其他</option>
         </select>
       </div>
       <div class="form-group">
@@ -869,7 +871,8 @@ function monthLabel(key) {
 // ── Categories ──────────────────────────
 const CAT_COLORS = {
   '生鮮-食': '#7ae8a8',
-  '備糧-食': '#e8c97a',
+  '雜糧-食': '#e8c97a',
+  '冷凍食品-食': '#7ab8e8',
   '日用': '#7ac8e8',
   '水電雜支': '#e87a9a',
   '外食': '#c87ae8',
@@ -1358,7 +1361,7 @@ function saveOCR() {
 
   if (type === 'grocery') {
     state.months[state.currentMonth].grocery.push({
-      cat: '備糧-食', name, vol: 0, unit: '個',
+      cat: '雜糧-食', name, vol: 0, unit: '個',
       expiry: '', open: '', done: '', buy: date, price, store: '', note: '📷 拍照辨識'
     });
     switchSection('grocery');
